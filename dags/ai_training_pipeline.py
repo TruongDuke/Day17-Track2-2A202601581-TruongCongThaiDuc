@@ -33,8 +33,11 @@ with DAG(
     # TODO (nhiệm vụ 1): hai tham số dưới đây quyết định chuyện gì xảy ra
     # khi ai đó bấm Clear Task, và khi DAG bị dồn nhiều lần chạy cùng lúc.
     # Đọc lại triệu chứng ở phiếu #1041 rồi đặt lại cho đúng.
-    catchup=True,
-    # max_active_runs=?
+    # catchup=False: bật DAG hay Clear Task không kéo theo hàng loạt run bù của
+    # mọi ngày quá khứ.
+    catchup=False,
+    # max_active_runs=1: hai run không bao giờ ghi đồng thời vào cùng một bảng.
+    max_active_runs=1,
     # ------------------------------------------------------------------
 ) as dag:
 

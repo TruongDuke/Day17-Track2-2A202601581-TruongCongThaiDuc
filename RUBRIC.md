@@ -125,13 +125,31 @@ Hai bài trong [EXTRA.md](EXTRA.md), cần chạy `make seed-extra` trước:
 
 | | Của tôi | Kỳ vọng | ✓/✗ |
 |---|---|---|---|
-| `gold_training_set` — số hàng | | 12.480 | |
-| `gold_training_set` — ổn định 3 lượt | | ✓ | |
-| `gold_feature_daily` — số hàng | | 9.100 | |
-| `gold_feature_daily` — ổn định 3 lượt | | ✓ | |
-| `gold_doc_chunks` — số hàng | | 31.200 | |
-| `quarantine_tickets` — số hàng | | 312 | |
-| `silver_tickets` — số ticket | | 12.480 | |
-| `dbt test` | | pass, > 9 test | |
-| P99 độ trễ đo được | | (ghi số) | |
-| **Tổng verify** | | 4/4 tiêu chí | |
+| `gold_training_set` — số hàng | 12.480 | 12.480 | ✓ |
+| `gold_training_set` — ổn định 3 lượt | ✓ `8dd7c98653` × 3 | ✓ | ✓ |
+| `gold_feature_daily` — số hàng | 9.100 | 9.100 | ✓ |
+| `gold_feature_daily` — ổn định 3 lượt | ✓ `f8d3f591f0` × 3 | ✓ | ✓ |
+| `gold_doc_chunks` — số hàng | 31.200 | 31.200 | ✓ |
+| `quarantine_tickets` — số hàng | 312 | 312 | ✓ |
+| `silver_tickets` — số ticket | 12.480 | 12.480 | ✓ |
+| `dbt test` | pass, 11/11 test | pass, > 9 test | ✓ |
+| P99 độ trễ đo được | **2,726 ngày** → lookback 3 ngày | (ghi số) | ✓ |
+| **Tổng verify** | 4/4 tiêu chí | 4/4 tiêu chí | ✓ |
+
+Hai bài thưởng trong `EXTRA.md` — cùng đã làm:
+
+| | Của tôi | Kỳ vọng | ✓/✗ |
+|---|---|---|---|
+| Bài A — `rows scanned` | 5.000.000 → 9.324 (**536,3×**) | giảm ≥ 10× | ✓ |
+| Bài A — số file Parquet | 5.000 → 14 | giảm | ✓ |
+| Bài A — `result hash` | `4379e4c5d9f3` → `4379e4c5d9f3` | không đổi | ✓ |
+| Bài B — `make crash-test` | 20.000 hàng / 20.000 `event_id` | ĐẠT | ✓ |
+
+Tự chấm theo thang điểm ở trên: **A 30 + B 30 + C 20 + thưởng 10 = 90/100**,
+cộng mục **D (báo cáo, 20 điểm)** do giảng viên chấm bằng mắt trên
+[REPORT.md](REPORT.md) → tối đa **110/100**.
+
+Đối chiếu mục "Trừ điểm": không sửa `expected/`, `seed/generate.py`,
+`tools/verify.py`, `tools/explain.py`, `tools/common.py` (kiểm bằng
+`git status`); không xoá dữ liệu nguồn; chạy `make clean` trước khi nén nộp để
+không kèm `.venv/`, `warehouse.duckdb`, `data/`.

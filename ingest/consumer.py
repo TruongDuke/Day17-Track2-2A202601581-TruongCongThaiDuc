@@ -53,7 +53,9 @@ TABLE = "bronze_events_stream"
 
 DDL = f"""
 create table if not exists {TABLE} (
-    event_id      varchar,
+    -- primary key là điều kiện để DuckDB chấp nhận mệnh đề ON CONFLICT, tức
+    -- là điều kiện để phép ghi trở thành idempotent.
+    event_id      varchar primary key,
     ticket_id     varchar,
     customer_id   varchar,
     customer_name varchar,
@@ -66,13 +68,30 @@ create table if not exists {TABLE} (
 
 
 def write_batch(con: duckdb.DuckDBPyConnection, batch: list[dict]) -> None:
-    """Ghi một lô message xuống kho — nhiệm vụ 5, hạng mục (b).
+    """Ghi một lô message xuống kho — phép ghi idempotent.
 
-    Câu lệnh hiện tại là INSERT thuần: ghi lại cùng một event_id sẽ tạo thêm
-    một hàng mới. Xem khung mã giả ở đầu file.
+    At-least-once nghĩa là một lô SẼ được phát lại sau sự cố. Câu INSERT thuần
+    biến mỗi lần phát lại thành một hàng mới; UPSERT theo event_id thì phát lại
+    bao nhiêu lần cũng chỉ còn đúng một hàng.
+
+    Chọn DO UPDATE chứ không DO NOTHING: nếu message được phát lại với nội dung
+    ĐÃ ĐỔI (nguồn sửa lại một event rồi gửi lại cùng event_id), DO UPDATE lấy
+    bản mới nhất, còn DO NOTHING giữ mãi bản đầu tiên và im lặng bỏ qua bản
+    sửa. Với message phát lại y hệt thì hai cách cho cùng kết quả — khác biệt
+    chỉ lộ ra đúng lúc nội dung đổi, nên chọn cái đúng ở cả hai trường hợp.
     """
     con.executemany(
-        f"insert into {TABLE} values (?, ?, ?, ?, ?, ?, ?, ?)",
+        f"""
+        insert into {TABLE} values (?, ?, ?, ?, ?, ?, ?, ?)
+        on conflict (event_id) do update set
+            ticket_id     = excluded.ticket_id,
+            customer_id   = excluded.customer_id,
+            customer_name = excluded.customer_name,
+            event_type    = excluded.event_type,
+            latency_ms    = excluded.latency_ms,
+            event_time    = excluded.event_time,
+            _ingested_at  = excluded._ingested_at
+        """,
         [
             (
                 r["event_id"], r["ticket_id"], r["customer_id"], r["customer_name"],
@@ -109,12 +128,17 @@ def consume(
                 break
             batch_no += 1
 
-            # ── KHỐI CẦN XEM XÉT — nhiệm vụ 5, hạng mục (a) ───────────────
-            # Ba dòng dưới đây được phép sắp xếp lại. maybe_crash() mô phỏng
-            # `kill -9`: tiến trình chết ngay tại vị trí của nó, không rollback.
-            consumer.commit()                 # ghi nhận offset
-            maybe_crash(batch_no, crash_at)   # sự cố xảy ra tại đây
+            # ── at-least-once: GHI TRƯỚC, COMMIT OFFSET SAU ───────────────
+            # Chết ở giữa hai dòng này => offset chưa dịch => lần khởi động lại
+            # đọc lại đúng lô đó. Ta chấp nhận đọc trùng (không mất dữ liệu) và
+            # trung hoà phần trùng bằng UPSERT trong write_batch().
+            #
+            # Thứ tự cũ (commit trước, ghi sau) là at-most-once: chết ở giữa
+            # thì offset đã dịch qua một lô chưa hề được ghi, và lô đó mất
+            # vĩnh viễn — không có cách nào biết để đọc lại.
             write_batch(con, batch)           # ghi dữ liệu
+            maybe_crash(batch_no, crash_at)   # sự cố xảy ra tại đây
+            consumer.commit()                 # ghi nhận offset
             # ─────────────────────────────────────────────────────────────
 
             written += len(batch)

@@ -29,9 +29,17 @@
 --   rõ hai vấn đề này tách nhau.
 -- ---------------------------------------------------------------------------
 
+-- Lookback = 3 ngày, chọn từ số đo chứ không từ cảm tính:
+--   P99 (_ingested_at - event_time) = 2,726 ngày · max = 2,945 ngày
+--   5,05% bản ghi tới kho muộn hơn 1 ngày so với lúc sự kiện xảy ra
+-- Window rộng hơn => cùng một (event_date, customer_id) được tính lại nhiều
+-- lượt, nên bắt buộc phải có unique_key hai cột + merge để lần tính sau THAY
+-- THẾ lần trước, nếu không sẽ cộng dồn đúng như lỗi ở nhiệm vụ 1.
 {{ config(
-    materialized     = 'incremental',
-    on_schema_change = 'fail'
+    materialized         = 'incremental',
+    unique_key           = ['event_date', 'customer_id'],
+    incremental_strategy = 'merge',
+    on_schema_change     = 'fail'
 ) }}
 
 select
@@ -49,7 +57,8 @@ select
 from {{ ref('silver_events') }}
 
 {% if is_incremental() %}
-where event_date > (select max(event_date) from {{ this }})
+-- Tính lại cả những ngày đã chốt trong phạm vi lookback, để bắt dữ liệu tới muộn.
+where event_date >= (select max(event_date) from {{ this }}) - interval 3 day
 {% endif %}
 
 group by 1, 2, 3, 4
